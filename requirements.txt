@@ -1,0 +1,4 @@
+autonavsim2D==2.0.0
+pygame==2.6.1
+setuptools
+numpy
