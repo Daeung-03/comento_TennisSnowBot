@@ -1,6 +1,6 @@
 """
-인지 팀원 작업 공간
 눈 감지 및 맵 생성 모듈
+카메라/센서 데이터에서 눈이 쌓인 영역을 찾아내고, AutoNavSim2D가 이해할 수 있는 맵 형식으로 변환
 """
 
 
@@ -35,6 +35,5 @@ class SnowDetector:
         Returns:
             map_matrix: 2D 리스트 (1=이동가능, 0=장애물)
         
-        TODO: 인지 팀원이 구현
         """
         raise NotImplementedError("인지 팀원이 구현해야 합니다")

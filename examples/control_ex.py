@@ -1,6 +1,10 @@
 """제어 팀원 테스트 예제"""
-from src.integration.sim_wrapper import TennisCourtSimulator
-from src.control.path_planner import custom_path_planner, custom_motion_planner
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+
+from main import TennisCourtSimulator
+from src.control.planner import custom_path_planner, custom_motion_planner
 
 # 시뮬레이터 초기화
 sim = TennisCourtSimulator()

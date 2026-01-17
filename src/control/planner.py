@@ -1,5 +1,4 @@
 """
-제어 팀원 작업 공간
 경로 계획 및 모션 제어 모듈
 """
 
@@ -18,14 +17,11 @@ def custom_path_planner(grid, matrix, start_loc, goal_loc):
         tuple: (path, runtime)
             - path: 경로 리스트
             - runtime: 계산 시간 문자열 (예: '10ms')
-    
-    TODO: 제어 팀원이 구현 (A*, Dijkstra 등)
     """
     # 기본값: 빈 경로 반환
     path = []
     runtime = '0ms'
     
-    print("WARNING: 기본 경로 계획 함수 사용 중 - 제어 팀원이 구현 필요")
     return (path, runtime)
 
 
@@ -43,11 +39,8 @@ def custom_motion_planner(grid, path, start, end):
         tuple: (robot_pose, waypoints)
             - robot_pose: 로봇 현재 포즈 (PoseStamped)
             - waypoints: 웨이포인트 리스트
-    
-    TODO: 제어 팀원이 구현
     """
     robot_pose = None
     waypoints = []
     
-    print("WARNING: 기본 모션 플래너 사용 중 - 제어 팀원이 구현 필요")
     return (robot_pose, waypoints)

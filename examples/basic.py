@@ -1,5 +1,9 @@
 """기본 시뮬레이터 동작 확인"""
-from src.integration.sim_wrapper import TennisCourtSimulator
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+
+from main import TennisCourtSimulator
 
 # 기본 시뮬레이터 실행
 sim = TennisCourtSimulator()
