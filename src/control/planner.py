@@ -27,7 +27,7 @@ def get_neighbors(pos, matrix):#A*
     rows = len(matrix)
     cols = len(matrix[0])
 
-    directions = [(-1,0), (1,0), (0,-1), (0,1)]  
+    directions = [(-1,0), (1,0), (0,-1), (0,1)]
 
     for dr, dc in directions:
         nr, nc = row + dr, col + dc
@@ -185,7 +185,7 @@ def custom_path_planner(grid, semantic_list, start_loc, goal_loc):
             current_pos = target
 
     runtime = f"{int((time.time() - start_time)*1000)}ms"
-    return full_path, runtime
+    return (full_path, runtime)
 
 
 def custom_motion_planner(grid, path, start, end):
@@ -203,9 +203,10 @@ def custom_motion_planner(grid, path, start, end):
             - robot_pose: 로봇 현재 포즈 (PoseStamped)
             - waypoints: 웨이포인트 리스트
     """
-    #robot_pose = None
-    #waypoints = []
     robot_pose = start
-    waypoints = path
+    if path and path[0] == start:
+        waypoints = path[1:]
+    else:
+        waypoints = path[:]
     
     return (robot_pose, waypoints)
