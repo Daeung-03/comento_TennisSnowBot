@@ -27,7 +27,7 @@ def get_neighbors(pos, matrix):#A*
     rows = len(matrix)
     cols = len(matrix[0])
 
-    directions = [(-1,0), (1,0), (0,-1), (0,1)]  # 上下左右
+    directions = [(-1,0), (1,0), (0,-1), (0,1)]  
 
     for dr, dc in directions:
         nr, nc = row + dr, col + dc
