@@ -1,26 +1,66 @@
 """
 경로 계획 및 모션 제어 모듈
 """
-def semantic_to_binary_map(semantic_list, rows, cols):
+def update_matrix_for_snow(matrix, snow_list, except_point):
     """
-    semantic_list: [[row, col, state], ...]
-    return: matrix[row][col] = 1 (can move) or 0 (obstacle)
+    Update binary grid map by marking snow regions as traversable.
+
+    이 함수는 기존 matrix에서 장애물(0)로 표시된 snow 영역과
+    except_point에 해당하는 좌표들을 통행 가능 영역(1)로 수정한다.
+
+    Parameters
+    ----------
+    matrix : list[list[int]]
+        Binary grid map (1: free space, 0: obstacle)
+
+    snow_list : list
+        List of snow clusters.
+        Each cluster is defined by [(top_left), (bottom_right)] coordinates.
+
+    except_point : list[tuple]
+        List of snow points (row, col) that should be ignored but remain traversable.
+
+    Returns
+    -------
+    list[list[int]]
+        Updated binary grid map where snow areas are walkable.
     """
-    matrix = [[0 for _ in range(cols)] for _ in range(rows)]
+    new_matrix = [row[:] for row in matrix]
 
-    for row, col, state in semantic_list:
-        # 통행구역
-        if state in [0, 2, 3]:     # 진입가능
-            matrix[row][col] = 1
-        else:                      # 장애물
-            matrix[row][col] = 0
+    # snow cluster 내 모두 통행 가능으로 표시
+    for (top_left, bottom_right) in snow_list:
+        r1, c1 = top_left
+        r2, c2 = bottom_right
+        for r in range(r1, r2 + 1):
+            for c in range(c1, c2 + 1):
+                new_matrix[r][c] = 1
 
-    return matrix
+    # except point도 통행가능으로 표시
+    for r, c in except_point:
+        new_matrix[r][c] = 1
+
+    return new_matrix
+
 
 def get_neighbors(pos, matrix):#A*
     """
-    pos: (row, col)
-    return: list of neighbor positions
+    Get valid neighbor cells for A* search.
+
+    A* 알고리즘에서 현재 위치(pos) 기준으로
+    상/하/좌/우 방향의 이동 가능한 이웃 셀을 반환한다.
+
+    Parameters
+    ----------
+    pos : tuple
+        Current position (row, col)
+
+    matrix : list[list[int]]
+        Binary grid map
+
+    Returns
+    -------
+    list[tuple]
+        List of neighboring positions that are traversable.
     """
     row, col = pos
     neighbors = []
@@ -39,11 +79,43 @@ def get_neighbors(pos, matrix):#A*
 
 def heuristic(a, b):
     """
-    a, b: (row, col)
+    Heuristic function for A* (Manhattan distance).
+
+    A* 알고리즘에서 사용하는 휴리스틱 함수로,
+    두 좌표 사이의 Manhattan distance를 계산한다.
+
+    Parameters
+    ----------
+    a, b : tuple
+        Grid coordinates (row, col)
+
+    Returns
+    -------
+    int
+        Estimated cost from a to b.
     """
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 def reconstruct_path(came_from, current):
+    """
+    Reconstruct path from A* search result.
+
+    A* 탐색 종료 후, came_from dictionary를 이용하여
+    start 지점부터 goal 지점까지의 경로를 복원한다.
+
+    Parameters
+    ----------
+    came_from : dict
+        Dictionary storing parent nodes
+
+    current : tuple
+        Goal position
+
+    Returns
+    -------
+    list[tuple]
+        Reconstructed path from start to goal.
+    """
     path = [current]
     while current in came_from:
         current = came_from[current]
@@ -53,9 +125,27 @@ def reconstruct_path(came_from, current):
 
 def a_star(matrix, start, goal):
     """
-    matrix: binary grid map
-    start, goal: (row, col)
-    return: path as list of (row, col)
+    A* path planning on a grid map.
+
+    Grid-based 환경에서 start에서 goal까지
+    최단 경로를 계산하기 위한 A* 알고리즘 구현이다.
+
+    Parameters
+    ----------
+    matrix : list[list[int]]
+        Binary grid map (1: free, 0: obstacle)
+
+    start : tuple
+        Start position (row, col)
+
+    goal : tuple
+        Goal position (row, col)
+
+    Returns
+    -------
+    list[tuple]
+        Path as a list of grid coordinates.
+        If no path exists, returns empty list.
     """
 
     open_set = [start]
@@ -92,115 +182,156 @@ def a_star(matrix, start, goal):
     # 경로 없음
     return []
 
-
-
-def generate_coverage_from_bbox(top_left, bottom_right, matrix):
+def find_nearest_cluster(matrix, start, snow_list):
     """
-    bbox 영역 내에서 간단한 행 스캔 방식 coverage path 생성
+    Find the nearest snow cluster using A* distance.
+
+    각 snow cluster의 좌상단과 우하단을
+    entry point로 설정하고, A*를 이용해 가장 가까운 cluster를 선택한다.
+
+    Parameters
+    ----------
+    matrix : list[list[int]]
+        Updated binary grid map
+
+    start : tuple
+        Current robot position (row, col)
+
+    snow_list : list
+        List of remaining snow clusters
+
+    Returns
+    -------
+    tuple
+        (nearest_cluster, path_to_cluster)
     """
-    r_min, c_min = top_left
-    r_max, c_max = bottom_right
+    best_path = None
+    best_cluster = None
+    min_len = float('inf')
 
-    waypoints = []
+    for cluster in snow_list:
+        entry_points = [
+            cluster[0],  # 좌상단
+            cluster[1],  # 우하단
+        ]
 
-    for r in range(r_min, r_max + 1):
-        row_cells = []
-        for c in range(c_min, c_max + 1):
-            if matrix[r][c] == 1:
-                row_cells.append((r, c))
+        for ep in entry_points:
+            path = a_star(matrix, start, ep)
+            if path and len(path) < min_len:
+                min_len = len(path)
+                best_path = path
+                best_cluster = cluster
 
-        if not row_cells:
-            continue
+    return best_cluster, best_path
 
-        if r % 2 == 0:
-            waypoints.extend(row_cells)
+
+def generate_cluster_coverage_path(cluster, entry_point):
+    """
+    Generate coverage path inside a snow cluster starting from entry point.
+
+    Parameters
+    ----------
+    cluster : list[tuple]
+        [(top_left), (bottom_right)] coordinates of a snow cluster
+
+    entry_point : tuple
+        Entry point into the cluster (must be one of the corners)
+
+    Returns
+    -------
+    list[tuple]
+        Coverage path starting from entry_point and covering the entire cluster.
+    """
+    (r1, c1), (r2, c2) = cluster
+
+    # 기본 row-scan (좌상단 → 우하단)
+    path = []
+    for r in range(r1, r2 + 1):
+        if (r - r1) % 2 == 0:
+            for c in range(c1, c2 + 1):
+                path.append((r, c))
         else:
-            waypoints.extend(reversed(row_cells))
+            for c in range(c2, c1 - 1, -1):
+                path.append((r, c))
 
-    return waypoints
+    # entry point가 좌상단이면 그대로 사용
+    if entry_point == (r1, c1):
+        return path
+
+    # entry point가 우하단이면 반대로 사용
+    if entry_point == (r2, c2):
+        return path[::-1]
+
+    # 그 외의 경우 (안전 장치)
+    # entry가 예상 위치가 아닐 경우 기본 path 반환
+    return path
 
 
 
-def custom_path_planner(grid, semantic_list, start_loc, clusters):
+
+
+def custom_path_planner(start_point, matrix, snow_list, except_point):
     """
-    제설 경로 계획 알고리즘 (cluster bbox 기반)
+    Custom global path planner for snow removal.
 
-    Args:
-        grid: AutoNavSim2D 그리드 객체
-        semantic_list: 맵 시맨틱 리스트
-        start_loc: 시작 위치 (row, col)
-        clusters: 인지 모듈에서 전달된 snow cluster bbox 리스트
-                  예:
-                  [
-                    {
-                      "top_left": (r1, c1),
-                      "bottom_right": (r2, c2)
-                    },
-                    ...
-                  ]
+    이 함수는 snow removal task를 위한 전체 경로를 생성한다.
+    전체 동작은 다음과 같은 단계로 구성된다:
 
-    Returns:
-        tuple: (path, runtime)
+    1) Snow 영역을 통행 가능하도록 matrix를 수정
+    2) 현재 위치에서 가장 가까운 snow cluster를 A*로 탐색
+    3) Cluster 내부를 coverage path planning으로 완전 커버
+    4) 모든 snow cluster가 처리될 때까지 반복
+
+    Parameters
+    ----------
+    start_point : tuple
+        Robot start position (row, col)
+
+    matrix : list[list[int]]
+        Original binary grid map
+
+    snow_list : list
+        List of snow clusters to be covered
+
+    except_point : list[tuple]
+        Snow points that should be ignored during planning
+
+    Returns
+    -------
+    list[tuple]
+        Final global path including inter-cluster paths
+        and intra-cluster coverage paths.
     """
-    import time
-    start_time = time.time()
+    final_path = []
+    current_pos = start_point
 
-    rows = grid.rows
-    cols = grid.cols
-    matrix = semantic_to_binary_map(semantic_list, rows, cols)
+    # 1. 맵 수정
+    matrix = update_matrix_for_snow(matrix, snow_list, except_point)
 
-    full_path = [start_loc]
-    current_pos = start_loc
+    remaining_clusters = snow_list[:]
 
-    for cluster in clusters:
-        top_left = tuple(cluster["top_left"])
-        bottom_right = tuple(cluster["bottom_right"])
-
-        # 1. 클러스터 진입 (좌상단을 entry point로 사용)
-        entry_path = a_star(matrix, current_pos, top_left)
-        if entry_path:
-            full_path.extend(entry_path[1:])
-            current_pos = top_left
-
-        # 2. bbox 내부 coverage
-        coverage_points = generate_coverage_from_bbox(
-            top_left, bottom_right, matrix
+    while remaining_clusters:
+        # 2. 최근거리 클러스터 찾기
+        cluster, path_to_cluster = find_nearest_cluster(
+            matrix, current_pos, remaining_clusters
         )
 
-        for target in coverage_points:
-            if target == current_pos:
-                continue
+        if cluster is None or path_to_cluster is None:
+            break
 
-            sub_path = a_star(matrix, current_pos, target)
-            if not sub_path:
-                continue
+        # 3. 클러스터 입구
+        final_path.extend(path_to_cluster)
+        current_pos = path_to_cluster[-1]
 
-            full_path.extend(sub_path[1:])
-            current_pos = target
+        # 4. 클러스터 coverage
+        entry_point = path_to_cluster[-1]
 
-    runtime = f"{int((time.time() - start_time) * 1000)}ms"
-    return (full_path, runtime)
+        coverage_path = generate_cluster_coverage_path(cluster,entry_point)
 
+        final_path.extend(coverage_path[1:])
+        current_pos = coverage_path[-1]
 
-def custom_motion_planner(grid, path, start, end):
-    """
-    제설 모션 제어 계획
-    
-    Args:
-        grid: AutoNavSim2D 그리드
-        path: 계획된 경로
-        start: 시작 지점
-        end: 종료 지점
-    
-    Returns:
-        tuple: (robot_pose, waypoints)
-            - robot_pose: 로봇 현재 포즈 (PoseStamped)
-            - waypoints: 웨이포인트 리스트
-    """
-    robot_pose = start
-    if path and path[0] == start:
-        waypoints = path[1:]
-    else:
-        waypoints = path[:]
-    
-    return (robot_pose, waypoints)
+        # 5. 처리된 클러스터 제거
+        remaining_clusters.remove(cluster)
+
+    return final_path
