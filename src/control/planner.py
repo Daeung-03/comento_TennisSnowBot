@@ -43,6 +43,14 @@ def heuristic(a, b):
     """
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
+def reconstruct_path(came_from, current):
+    path = [current]
+    while current in came_from:
+        current = came_from[current]
+        path.append(current)
+    path.reverse()
+    return path
+
 def a_star(matrix, start, goal):
     """
     matrix: binary grid map
@@ -53,7 +61,7 @@ def a_star(matrix, start, goal):
     open_set = [start]
     closed_set = set()
 
-    came_from = {}          # child -> parent
+    came_from = {}
     g_score = {start: 0}
     f_score = {start: heuristic(start, goal)}
 
@@ -81,110 +89,96 @@ def a_star(matrix, start, goal):
                 if neighbor not in open_set:
                     open_set.append(neighbor)
 
-            came_from[neighbor] = current
-            g_score[neighbor] = tentative_g
-            f_score[neighbor] = tentative_g + heuristic(neighbor, goal)
-
     # 경로 없음
     return []
 
-def reconstruct_path(came_from, current):
-    path = [current]
-    while current in came_from:
-        current = came_from[current]
-        path.append(current)
-    path.reverse()
-    return path
 
 
-
-def generate_coverage_waypoints_from_semantic(semantic_list):
+def generate_coverage_from_bbox(top_left, bottom_right, matrix):
     """
-     state == 3 (흰눈)에 coverage planning path 생성
+    bbox 영역 내에서 간단한 행 스캔 방식 coverage path 생성
     """
-    snow_cells = [(r, c) for r, c, s in semantic_list if s == 3]
-
-    # 행으로 배열
-    snow_cells.sort(key=lambda x: (x[0], x[1]))
+    r_min, c_min = top_left
+    r_max, c_max = bottom_right
 
     waypoints = []
-    current_row = None
-    row_buffer = []
 
-    for cell in snow_cells:
-        if current_row is None:
-            current_row = cell[0]
+    for r in range(r_min, r_max + 1):
+        row_cells = []
+        for c in range(c_min, c_max + 1):
+            if matrix[r][c] == 1:
+                row_cells.append((r, c))
 
-        if cell[0] != current_row:
-            if current_row % 2 == 0:
-                waypoints.extend(row_buffer)
-            else:
-                waypoints.extend(reversed(row_buffer))
+        if not row_cells:
+            continue
 
-            row_buffer = []
-            current_row = cell[0]
-
-        row_buffer.append(cell)
-
-    # 마지막 줄 처리
-    if row_buffer:
-        if current_row % 2 == 0:
-            waypoints.extend(row_buffer)
+        if r % 2 == 0:
+            waypoints.extend(row_cells)
         else:
-            waypoints.extend(reversed(row_buffer))
+            waypoints.extend(reversed(row_cells))
 
     return waypoints
 
 
 
-def custom_path_planner(grid, semantic_list, start_loc, goal_loc):
+def custom_path_planner(grid, semantic_list, start_loc, clusters):
     """
-    제설 경로 계획 알고리즘
-    
+    제설 경로 계획 알고리즘 (cluster bbox 기반)
+
     Args:
         grid: AutoNavSim2D 그리드 객체
-        semantic_list: 맵 매트릭스 (2D list)
-        start_loc: 시작 위치
-        goal_loc: 목표 위치
-    
+        semantic_list: 맵 시맨틱 리스트
+        start_loc: 시작 위치 (row, col)
+        clusters: 인지 모듈에서 전달된 snow cluster bbox 리스트
+                  예:
+                  [
+                    {
+                      "top_left": (r1, c1),
+                      "bottom_right": (r2, c2)
+                    },
+                    ...
+                  ]
+
     Returns:
         tuple: (path, runtime)
-            - path: 경로 리스트
-            - runtime: 계산 시간 문자열 (예: '10ms')
     """
     import time
     start_time = time.time()
-    # binary map 생성
+
     rows = grid.rows
     cols = grid.cols
     matrix = semantic_to_binary_map(semantic_list, rows, cols)
 
-    # 눈만 처리하는 coverage path 생성
-    coverage_points = generate_coverage_waypoints_from_semantic(semantic_list)
-
     full_path = [start_loc]
     current_pos = start_loc
 
-    for target in coverage_points:
-        if target == current_pos:
-            continue
+    for cluster in clusters:
+        top_left = tuple(cluster["top_left"])
+        bottom_right = tuple(cluster["bottom_right"])
 
+        # 1. 클러스터 진입 (좌상단을 entry point로 사용)
+        entry_path = a_star(matrix, current_pos, top_left)
+        if entry_path:
+            full_path.extend(entry_path[1:])
+            current_pos = top_left
 
-        if target in get_neighbors(current_pos, matrix):
-            full_path.append(target)
-            current_pos = target
-        else:
-            # A* 로 보충
+        # 2. bbox 내부 coverage
+        coverage_points = generate_coverage_from_bbox(
+            top_left, bottom_right, matrix
+        )
+
+        for target in coverage_points:
+            if target == current_pos:
+                continue
+
             sub_path = a_star(matrix, current_pos, target)
             if not sub_path:
                 continue
 
-            for p in sub_path[1:]:
-                full_path.append(p)
-
+            full_path.extend(sub_path[1:])
             current_pos = target
 
-    runtime = f"{int((time.time() - start_time)*1000)}ms"
+    runtime = f"{int((time.time() - start_time) * 1000)}ms"
     return (full_path, runtime)
 
 
