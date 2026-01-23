@@ -10,9 +10,9 @@ def semantic_to_binary_map(semantic_list, rows, cols):
 
     for row, col, state in semantic_list:
         # 통행구역
-        if state in [0, 2, 3]:     # 자유공간, 제설완료, 흰눈
+        if state in [0, 2, 3]:     # 진입가능
             matrix[row][col] = 1
-        else:                      # 코트라인, 로봇, 로봇은 지금 static한 장애물로 삼음.
+        else:                      # 장애물
             matrix[row][col] = 0
 
     return matrix
