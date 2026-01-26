@@ -46,35 +46,50 @@ VIVID_COLORS = [
 #     return snow_top, snow_bottom
 
 
-def apply_kmeans_clustering(nav, snow_pixels, area_name="Unknown", color_offset=0):
-    """
-    2. 군집화 함수
-    리턴값: 각 군집의 중심 좌표 리스트 [[r, c], [r, c], ...] (모두 정수형)
-    """
-    int_centers = []
 
+def apply_kmeans_clustering(nav, snow_pixels, area_name="Unknown", color_offset=0, visualize_boxes=True):
+    """
+    군집화 및 Bounding Box 추출 함수
+    """
+    bounding_boxes = []
+    
     if len(snow_pixels) > 5:
         data = np.array(snow_pixels)
-        num_clusters = max(1, len(snow_pixels) // 22)
-
+        # 군집 개수 자동 계산 (밀도 기반)
+        num_clusters = max(1, len(snow_pixels) // 15)
+        
+        # K-Means 수행
         kmeans = KMeans(n_clusters=num_clusters, n_init=10, random_state=42).fit(data)
-        labels = kmeans.labels_
+        
+        # Bounding Box 계산
+        for label in range(num_clusters):
+            cluster_points = data[kmeans.labels_ == label]
+            if len(cluster_points) == 0: continue
+            
+            r_min, c_min = np.min(cluster_points, axis=0)
+            r_max, c_max = np.max(cluster_points, axis=0)
+            
+            # (좌상단, 우하단) 저장
+            top_left = (int(r_min), int(c_min))
+            bottom_right = (int(r_max), int(c_max))
+            bounding_boxes.append((top_left, bottom_right))
+            
+            # 군집 픽셀 색칠
+            color = VIVID_COLORS[(label + color_offset) % len(VIVID_COLORS)]
+            for pr, pc in cluster_points:
+                try: nav.map_val[int(pr)][int(pc)][1] = color
+                except: pass
+            
+            # [NEW] Bounding Box 테두리 그리기
+            if visualize_boxes:
+                draw_bounding_box(nav, top_left, bottom_right, 
+                                color=BOX_BORDER_COLOR, thickness=2)
+                
+            print(f"   Box {label+1}: {top_left} → {bottom_right} (크기: {r_max-r_min+1}x{c_max-c_min+1})")
 
-        # 소수점 제거 후 정수 리스트로 변환
-        raw_centers = kmeans.cluster_centers_
-        for center in raw_centers:
-            # 반올림 후 정수형 변환하여 리스트에 추가
-            int_centers.append([int(round(center[0])), int(round(center[1]))])
+    print(f"\n[Step 2] {area_name} 군집화 완료: {len(bounding_boxes)}개 Box 생성")
+    return bounding_boxes
 
-        for idx, coord in enumerate(snow_pixels):
-            r, c = coord
-            label = labels[idx]
-            nav.map_val[r][c][1] = VIVID_COLORS[(label + color_offset) % len(VIVID_COLORS)]
-
-    print(f"\n[Step 2: apply_kmeans_clustering ({area_name}) 결과]")
-    print(f" - 정수화된 중심점 리스트: {int_centers}")
-
-    return int_centers
 
 
 def run_simulation():
