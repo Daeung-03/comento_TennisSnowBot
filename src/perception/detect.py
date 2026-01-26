@@ -12,38 +12,64 @@ VIVID_COLORS = [
     (0, 128, 0), (128, 0, 128), (0, 0, 128), (150, 75, 0)
 ]
 
-# TennisCourt_Kmeans.pkl 로 고정된 제설상태맵 쓴다.
-# def create_tennis_map(nav):
-#     """
-#     1. 맵 생성 함수
-#     리턴값: [[r, c], [r, c], ...] 형태의 정수 리스트 (상단/하단 분리)
-#     """
-#     snow_top, snow_bottom = [], []
 
-#     for r in range(R_SIZE):
-#         for c in range(C_SIZE):
-#             nav.map_val[r][c][1] = GREY
+def create_tennis_map(nav):
+    """
+    1. 맵 생성 함수
+    리턴값: [[r, c], [r, c], ...] 형태의 정수 리스트 (상단/하단 분리), 제설 구역을 네트 기준으로 잘 분리하기위해 나누고 K-means 수행한다.
+    """
+    snow_list=[]
+    snow_top, snow_bottom = [], []
 
-#     for r in range(40, 141):
-#         for c in range(40, 191):
-#             if not (90 < c < 140):  # 중앙 통로 제외
-#                 if r == 90: continue  # 네트 라인 제외
-#                 nav.map_val[r][c][1] = GREEN
-#                 if random.random() < 0.15:
-#                     if r < 90:
-#                         snow_top.append([r, c])
-#                     else:
-#                         snow_bottom.append([r, c])
+    for r in range(R_SIZE):
+        for c in range(C_SIZE):
+            nav.map_val[r][c][1] = GREY
 
-#     for c in range(40, 191):
-#         if not (90 < c < 140):
-#             nav.map_val[90][c][1] = BLACK
+    for r in range(40, 141):
+        for c in range(40, 191):
+            if not (90 < c < 140):  # 중앙 통로 제외
+                if r == 90: continue  # 네트 라인 제외
+                nav.map_val[r][c][1] = GREEN
+                if random.random() < 0.15:
+                    if r < 90:
+                        snow_top.append([r, c])
+                    else:
+                        snow_bottom.append([r, c])
 
-#     print("\n[Step 1: create_tennis_map 실행 결과]")
-#     print(f" - 상단 눈 리스트 (첫 3개): {snow_top[:3]}")
-#     print(f" - 하단 눈 리스트 (첫 3개): {snow_bottom[:3]}")
+    for c in range(40, 191):
+        if not (90 < c < 140):
+            nav.map_val[90][c][1] = BLACK
 
-#     return snow_top, snow_bottom
+    print("\n[Step 1: create_tennis_map 실행 결과]")
+    print(f" - 상단 눈 리스트 (첫 3개): {snow_top[:3]}")
+    print(f" - 하단 눈 리스트 (첫 3개): {snow_bottom[:3]}")
+
+    return snow_top, snow_bottom
+
+
+# 1. 누락된 색상 및 설정 정의
+BOX_BORDER_COLOR = (255, 255, 255)  # 바운딩 박스 테두리 색상 (흰색)
+
+# 2. 누락된 바운딩 박스 그리기 함수 정의
+def draw_bounding_box(nav, top_left, bottom_right, color=(255, 255, 255), thickness=1):
+    """
+    맵의 map_val에 바운딩 박스 테두리를 그리는 함수
+    top_left: (r_min, c_min), bottom_right: (r_max, c_max)
+    """
+    r_min, c_min = top_left
+    r_max, c_max = bottom_right
+
+    # 상단 및 하단 가로선
+    for c in range(c_min, c_max + 1):
+        for t in range(thickness):
+            if 0 <= r_min + t < R_SIZE: nav.map_val[r_min + t][c][1] = color
+            if 0 <= r_max - t < R_SIZE: nav.map_val[r_max - t][c][1] = color
+
+    # 좌측 및 우측 세로선
+    for r in range(r_min, r_max + 1):
+        for t in range(thickness):
+            if 0 <= c_min + t < C_SIZE: nav.map_val[r][c_min + t][1] = color
+            if 0 <= c_max - t < C_SIZE: nav.map_val[r][c_max - t][1] = color
 
 
 
@@ -126,5 +152,5 @@ def run_simulation():
     return all_centers  # 최종적으로 모든 중심점 리스트 반환
 
 
-if __name__ == "__main__":
-    final_destinations = run_simulation()
+# if __name__ == "__main__":
+#     final_destinations = run_simulation()
