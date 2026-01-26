@@ -186,7 +186,7 @@ def find_nearest_cluster(matrix, start, snow_list):
     """
     Find the nearest snow cluster using A* distance.
 
-    각 snow cluster의 좌상단과 우하단을
+    각 snow cluster의 네 개의 코너를
     entry point로 설정하고, A*를 이용해 가장 가까운 cluster를 선택한다.
 
     Parameters
@@ -203,16 +203,20 @@ def find_nearest_cluster(matrix, start, snow_list):
     Returns
     -------
     tuple
-        (nearest_cluster, path_to_cluster)
+        (nearest_cluster, path_to_cluster, entry_point)
     """
     best_path = None
     best_cluster = None
+    best_entry = None
     min_len = float('inf')
 
     for cluster in snow_list:
+        (r1, c1), (r2, c2) = cluster
         entry_points = [
-            cluster[0],  # 좌상단
-            cluster[1],  # 우하단
+            (r1, c1), #좌상단
+            (r1, c2), #우상단
+            (r2, c1), #좌하단
+            (r2, c2) #우하단
         ]
 
         for ep in entry_points:
@@ -221,52 +225,47 @@ def find_nearest_cluster(matrix, start, snow_list):
                 min_len = len(path)
                 best_path = path
                 best_cluster = cluster
-
-    return best_cluster, best_path
+                best_entry = ep
+    return best_cluster, best_path, best_entry
 
 
 def generate_cluster_coverage_path(cluster, entry_point):
     """
-    Generate coverage path inside a snow cluster starting from entry point.
-
     Parameters
     ----------
     cluster : list[tuple]
         [(top_left), (bottom_right)] coordinates of a snow cluster
 
     entry_point : tuple
-        Entry point into the cluster (must be one of the corners)
+        Entry point into the cluster (boundary point)
 
     Returns
     -------
     list[tuple]
-        Coverage path starting from entry_point and covering the entire cluster.
+        Coverage path that starts naturally from the entry side and
+        covers the entire cluster.
     """
     (r1, c1), (r2, c2) = cluster
+    er, ec = entry_point
 
-    # 기본 row-scan (좌상단 → 우하단)
+    rows = list(range(r1, r2 + 1))
+    cols = list(range(c1, c2 + 1))
+
+    
+    if er == r2:
+        rows = rows[::-1]
+
     path = []
-    for r in range(r1, r2 + 1):
-        if (r - r1) % 2 == 0:
-            for c in range(c1, c2 + 1):
-                path.append((r, c))
-        else:
-            for c in range(c2, c1 - 1, -1):
-                path.append((r, c))
 
-    # entry point가 좌상단이면 그대로 사용
-    if entry_point == (r1, c1):
-        return path
+    for i, r in enumerate(rows):
+        if ec == c2:      
+            col_iter = cols[::-1] if i % 2 == 0 else cols[:]
+        else:             
+            col_iter = cols[:] if i % 2 == 0 else cols[::-1]
 
-    # entry point가 우하단이면 반대로 사용
-    if entry_point == (r2, c2):
-        return path[::-1]
+        path.extend((r, c) for c in col_iter)
 
-    # 그 외의 경우 (안전 장치)
-    # entry가 예상 위치가 아닐 경우 기본 path 반환
     return path
-
-
 
 
 
@@ -312,7 +311,7 @@ def custom_path_planner(start_point, matrix, snow_list, except_point):
 
     while remaining_clusters:
         # 2. 최근거리 클러스터 찾기
-        cluster, path_to_cluster = find_nearest_cluster(
+        cluster, path_to_cluster, entry_point = find_nearest_cluster(
             matrix, current_pos, remaining_clusters
         )
 
@@ -320,18 +319,49 @@ def custom_path_planner(start_point, matrix, snow_list, except_point):
             break
 
         # 3. 클러스터 입구
-        final_path.extend(path_to_cluster)
+        if final_path and final_path[-1] == path_to_cluster[0]:
+            final_path.extend(path_to_cluster[1:])
+        else:
+            final_path.extend(path_to_cluster)
+
         current_pos = path_to_cluster[-1]
 
         # 4. 클러스터 coverage
-        entry_point = path_to_cluster[-1]
+        coverage_path = generate_cluster_coverage_path(cluster, entry_point)
 
-        coverage_path = generate_cluster_coverage_path(cluster,entry_point)
+        if final_path and final_path[-1] == coverage_path[0]:
+            final_path.extend(coverage_path[1:])
+        else:
+            final_path.extend(coverage_path)
 
-        final_path.extend(coverage_path[1:])
         current_pos = coverage_path[-1]
 
         # 5. 처리된 클러스터 제거
         remaining_clusters.remove(cluster)
 
     return final_path
+
+
+
+def custom_motion_planner(grid, path, start, end):
+    """
+    제설 모션 제어 계획
+    
+    Args:
+        grid: AutoNavSim2D 그리드
+        path: 계획된 경로
+        start: 시작 지점
+        end: 종료 지점
+    
+    Returns:
+        tuple: (robot_pose, waypoints)
+            - robot_pose: 로봇 현재 포즈 (PoseStamped)
+            - waypoints: 웨이포인트 리스트
+    """
+    robot_pose = start
+    if path and path[0] == start:
+        waypoints = path[1:]
+    else:
+        waypoints = path[:]
+    
+    return (robot_pose, waypoints)
