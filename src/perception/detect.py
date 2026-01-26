@@ -3,7 +3,6 @@
 카메라/센서 데이터에서 눈이 쌓인 영역을 찾아내고, AutoNavSim2D가 이해할 수 있는 맵 형식으로 변환
 """
 
-
 import pickle
 import numpy as np
 import random
