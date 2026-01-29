@@ -1,5 +1,4 @@
-```markdown
-# 🎾 TennisCourt_SnowRemoval
+# TennisCourt_SnowRemoval
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![Simulator](https://img.shields.io/badge/simulator-AutoNavSim2D-orange.svg)
