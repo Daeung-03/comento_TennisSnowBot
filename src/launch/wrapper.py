@@ -1,100 +1,5 @@
-<<<<<<< HEAD
-"""AutoNavSim2D 래퍼 클래스"""
-from autonavsim2d.autonavsim2d import AutoNavSim2D
-from autonavsim2d.utils.utils import RED, GREEN, BLUE, ORANGE
-
-
-class TennisCourtSimulator:
-    """테니스장 제설 로봇 시뮬레이터"""
-    
-    def __init__(self, map_path=None):
-        """
-        시뮬레이터 초기화
-        
-        Args:
-            map_path: 맵 파일 경로 (.pkl), None이면 빈 맵
-        """
-        self.config = {
-            "show_frame": True,
-            "show_grid": False,
-            "map": map_path
-        }
-        self.custom_planner = 'default'
-        self.custom_motion_planner = 'default'
-        self.nav = None  # AutoNavSim2D 객체 저장용
-        self.cluster_targets = []  # 군집 목적지 저장
-    
-    def set_path_planner(self, planner_func):
-        """커스텀 경로 계획 함수 등록"""
-        self.custom_planner = planner_func
-        print(f"경로 계획 함수 등록: {planner_func.__name__}")
-    
-    def set_motion_planner(self, motion_func):
-        """커스텀 모션 제어 함수 등록"""
-        self.custom_motion_planner = motion_func
-        print(f"모션 제어 함수 등록: {motion_func.__name__}")
-    
-    def load_cluster_targets(self, cluster_data, visualize=True):
-        """
-        군집 목적지 좌표를 로드하고 맵에 표시
-        
-        Args:
-            cluster_data: get_perception_info() 결과 딕셔너리
-            visualize: True면 맵에 군집 시각화
-        """
-        self.cluster_targets = [c['target_center'] for c in cluster_data['clusters']]
-        
-        if visualize and len(self.cluster_targets) > 0:
-            # AutoNavSim2D 객체 생성 (맵 로드용)
-            self.nav = AutoNavSim2D(
-                custom_planner=self.custom_planner,
-                custom_motion_planner=self.custom_motion_planner,
-                window='amr',
-                config=self.config
-            )
-            
-            # 각 군집을 색상으로 구분하여 표시
-            colors = [RED, GREEN, BLUE, ORANGE]
-            
-            print(f"\n  🎯 군집 목적지를 맵에 표시합니다...")
-            for i, (r, c) in enumerate(self.cluster_targets):
-                color = colors[i % len(colors)]
-                
-                # 군집 중심에 3x3 마커 표시
-                for dr in [-1, 0, 1]:
-                    for dc in [-1, 0, 1]:
-                        try:
-                            self.nav.map_val[r + dr][c + dc][1] = color
-                        except IndexError:
-                            pass
-                
-                print(f"     목적지 {i+1}: {[r, c]} → {color} 색상")
-            
-            print(f"  ✅ {len(self.cluster_targets)}개 목적지 표시 완료!")
-    
-    def run(self):
-        """시뮬레이션 실행"""
-        print("\n시뮬레이션 시작...")
-        print(f"맵: {self.config['map'] or '새 맵'}")
-        
-        # 군집 로드가 되어있으면 기존 nav 사용
-        if self.nav is not None:
-            print("  (군집 목적지가 표시된 맵 사용)")
-            self.nav.run()
-        else:
-            # 일반 실행
-            nav = AutoNavSim2D(
-                custom_planner=self.custom_planner,
-                custom_motion_planner=self.custom_motion_planner,
-                window='amr',
-                config=self.config
-            )
-            nav.run()
-=======
 """
-wrapper.py
-테니스장 제설 시뮬레이터 래퍼 클래스
-AutoNavSim2D, detect1.py, Planner.py를 통합
+wrapper.py - 테니스장 제설 시뮬레이터 통합 래퍼
 """
 
 import os
@@ -112,26 +17,30 @@ from src.control.planner import create_snow_removal_planners
 
 class SnowRemovalSimulator:
     """
-    테니스장 제설 시뮬레이터
+    테니스장 제설 시뮬레이터 통합
     
-    주요 기능:
-    1. 맵 로드 및 눈 영역 감지 (DBSCAN)
-    2. 제설 경로 계획 및 모션 제어 생성
-    3. AutoNavSim2D 시뮬레이션 실행
+    Attributes:
+        map_path (str): 맵 파일 경로
+        snow_clusters (list): 감지된 눈 영역 리스트
+        custom_path_planner (func): 경로 계획 함수
+        custom_motion_planner (func): 모션 제어 함수
+        simulator (AutoNavSim2D): 시뮬레이터 인스턴스
     """
     
-    def __init__(self, map_path='maps/TennisCourt_Clustered.pkl', show_frame=True, show_grid=True):
+    def __init__(self, map_path='maps/TennisCourt_Snow.pkl', show_frame=True, show_grid=True):
         """
+        초기화 및 설정
+        
         Parameters:
-            map_path (str): 테니스 코트 맵 파일 경로
-            show_frame (bool): 로봇 프레임 표시 여부
-            show_grid (bool): 그리드 표시 여부
+            map_path: 로드할 맵 파일 경로 (.pkl)
+            show_frame: 로봇 좌표계(Frame) 표시 여부
+            show_grid: 맵 그리드 표시 여부
         """
         self.map_path = map_path
         self.show_frame = show_frame
         self.show_grid = show_grid
         
-        # 초기화
+        # 변수 초기화
         self.map_data = None
         self.snow_clusters = []
         self.custom_path_planner = None
@@ -143,7 +52,14 @@ class SnowRemovalSimulator:
         print("=" * 60)
     
     def load_map_and_detect_snow(self):
-        """맵 로드 및 눈 영역 감지"""
+        """
+        [Step 1] 맵 로드 및 눈 영역 감지 (Perception)
+        
+        detect.py 모듈을 호출하여 눈 클러스터 정보를 가져옵니다.
+        
+        Returns:
+            list: 감지된 눈 클러스터 리스트
+        """
         print(f"\n[Step 1] 맵 로드 및 클러스터 감지")
         print(f"   - 맵 경로: {self.map_path}")
         
@@ -164,13 +80,8 @@ class SnowRemovalSimulator:
         self.map_data = result['map_val']
         self.snow_clusters = result['all_boxes']
         
-        print(f"\n✅ 맵 로드 완료")
-        print(f"   - 상단 클러스터: {len(result['top_boxes'])}개")
-        print(f"   - 하단 클러스터: {len(result['bottom_boxes'])}개")
-        print(f"   - 전체 제설 영역: {len(self.snow_clusters)}개")
-        
         # 클러스터 정보 출력
-        print(f"\n📋 감지된 클러스터:")
+        print(f"\n📋 감지된 제설 구역:")
         for idx, cluster in enumerate(self.snow_clusters, 1):
             (r1, c1), (r2, c2) = cluster
             width = c2 - c1 + 1
@@ -181,29 +92,42 @@ class SnowRemovalSimulator:
         return self.snow_clusters
     
     def create_planners(self):
-        """제설 경로 계획 및 모션 제어 함수 생성"""
+        """
+        [Step 2] 경로 및 모션 플래너 생성 (Control)
+        
+        planner.py의 팩토리 함수를 호출하여 
+        현재 눈 상황에 맞는 전용 플래너 함수들을 생성합니다.
+        
+        Returns:
+            tuple: (path_planner, motion_planner)
+        """
         print(f"\n[Step 2] Custom Planner 생성")
         
         if not self.snow_clusters:
             print("⚠️ 경고: 눈 클러스터가 없습니다. 먼저 load_map_and_detect_snow()를 실행하세요.")
             return None
         
-        # Closure 패턴으로 planner 생성
+        # Closure 패턴으로 planner 생성(factory 함수 호출)
         self.custom_path_planner, self.custom_motion_planner = create_snow_removal_planners(
             self.snow_clusters
         )
         
         print(f"✅ Custom Planner 생성 완료")
-        print(f"   - Path Planner: {self.custom_path_planner.__name__}")
-        print(f"   - Motion Planner: {self.custom_motion_planner.__name__}")
-        print(f"   - Captured Clusters: {len(self.snow_clusters)}개")
         
         return self.custom_path_planner, self.custom_motion_planner
     
     def initialize_simulator(self):
-        """AutoNavSim2D 시뮬레이터 초기화"""
+        """
+        [Step 3] AutoNavSim2D 시뮬레이터 초기화
+        
+        준비된 맵 데이터와 플래너를 시뮬레이터에 주입합니다.
+        
+        Returns:
+            AutoNavSim2D: 초기화된 시뮬레이터 객체
+        """
         print(f"\n[Step 3] AutoNavSim2D 초기화")
         
+        # 사전 조건 확인
         if self.custom_path_planner is None or self.custom_motion_planner is None:
             print("⚠️ 경고: Planner가 생성되지 않았습니다. 먼저 create_planners()를 실행하세요.")
             return None
@@ -212,14 +136,11 @@ class SnowRemovalSimulator:
             print("⚠️ 경고: 맵 데이터가 없습니다. 먼저 load_map_and_detect_snow()를 실행하세요.")
             return None
         
-        # 맵 데이터를 임시 파일로 저장 (AutoNavSim2D가 파일 경로를 요구하므로)
-        temp_map_path = 'maps/temp_clustered_map.pkl'
+        # 맵 데이터를 임시 파일로 저장(시뮬레이터)
+        temp_map_path = 'maps/temp_Snow_map.pkl'
         os.makedirs('maps', exist_ok=True)
-        
         with open(temp_map_path, 'wb') as f:
             pickle.dump(self.map_data, f)
-        
-        print(f"   - 임시 맵 저장: {temp_map_path}")
         
         # AutoNavSim2D 초기화
         config = {
@@ -229,6 +150,7 @@ class SnowRemovalSimulator:
         }
         
         try:
+            # 시뮬레이터 인스턴스 생성
             self.simulator = AutoNavSim2D(
                 custom_planner=self.custom_path_planner,
                 custom_motion_planner=self.custom_motion_planner,
@@ -236,20 +158,16 @@ class SnowRemovalSimulator:
                 config=config
             )
             
-            # ✅ 수정: AutoNavSim2D 버그 우회
             # custom_motion_planner가 None이 아닐 때 속성이 설정되지 않는 문제 해결
             if not hasattr(self.simulator, 'custom_motion_planner'):
-                print(f"   ⚠️ AutoNavSim2D 버그 감지: custom_motion_planner 속성 누락")
-                print(f"   💡 Workaround 적용 중...")
+                print(" 💡 Workaround: Motion Planner 속성 강제 설정")
                 # dev_custom_motion_planner를 custom_motion_planner로 복사
                 if hasattr(self.simulator, 'dev_custom_motion_planner'):
                     self.simulator.custom_motion_planner = self.simulator.dev_custom_motion_planner
-                    print(f"   ✅ 속성 복사 완료")
                 else:
                     # 직접 설정
                     self.simulator.custom_motion_planner = self.custom_motion_planner
                     self.simulator.dev_custom_motion_planner = self.custom_motion_planner
-                    print(f"   ✅ 속성 직접 설정 완료")
             
             print(f"✅ AutoNavSim2D 초기화 완료")
             print(f"   - Window: amr (Autonomous Mobile Robot)")
@@ -265,7 +183,9 @@ class SnowRemovalSimulator:
         return self.simulator
     
     def run(self):
-        """시뮬레이터 실행"""
+        """
+        [Step 4] 시뮬레이션 루프 실행
+        """
         print(f"\n[Step 4] 시뮬레이션 시작")
         print("=" * 60)
         
@@ -276,14 +196,14 @@ class SnowRemovalSimulator:
         
         print("\n🎮 시뮬레이션 사용법:")
         print("   1. 맵에서 로봇 시작 위치를 클릭하세요 (빨간색)")
-        print("   2. 목표 위치를 클릭하세요 (녹색) - 모션에는 의미 없음")
+        print("   2. 목표 위치를 클릭하세요 (녹색) - 제설에서는 의미 없음")
         print("   3. 'Plan Path' 버튼을 클릭하여 경로를 생성하세요")
         print("      → 모든 클러스터를 순회하는 제설 경로가 생성됩니다")
         print("   4. 'Navigate' 버튼을 클릭하여 로봇을 움직이세요")
-        print("      → 각 클러스터를 ㄹ 패턴으로 완전히 커버합니다")
+        print("      → 각 클러스터를 boustrophedon(ㄹ) 패턴으로 완전히 커버합니다")
         print("   5. 'Reset' 버튼으로 재시작할 수 있습니다")
         print("\n💡 팁:")
-        print("   - 시작 위치는 코트 내부 아무 곳이나 가능합니다")
+        print("   - 시작 위치는 아무 곳이나 가능합니다")
         print("   - 로봇이 가장 가까운 클러스터부터 순차적으로 방문합니다")
         print("   - 대시보드에서 실시간 위치와 진행상황을 확인할 수 있습니다")
         print("\n" + "=" * 60)
@@ -319,91 +239,3 @@ class SnowRemovalSimulator:
             import traceback
             traceback.print_exc()
 
-
-# ==================== 편의 함수 ====================
-
-def create_simulator(map_path='maps/TennisCourt_Clustered.pkl', show_frame=True, show_grid=True):
-    """
-    시뮬레이터 생성 및 초기화 (헬퍼 함수)
-    
-    Parameters:
-        map_path (str): 맵 파일 경로
-        show_frame (bool): 로봇 프레임 표시
-        show_grid (bool): 그리드 표시
-    
-    Returns:
-        SnowRemovalSimulator: 초기화된 시뮬레이터 객체
-    """
-    sim = SnowRemovalSimulator(map_path, show_frame, show_grid)
-    sim.load_map_and_detect_snow()
-    sim.create_planners()
-    sim.initialize_simulator()
-    return sim
-
-
-def quick_run(map_path='maps/TennisCourt_Clustered.pkl', show_frame=True, show_grid=True):
-    """
-    시뮬레이터 생성부터 실행까지 한 번에 수행 (최단 실행)
-    
-    Parameters:
-        map_path (str): 맵 파일 경로
-        show_frame (bool): 로봇 프레임 표시
-        show_grid (bool): 그리드 표시
-    """
-    sim = SnowRemovalSimulator(map_path, show_frame, show_grid)
-    sim.quick_start()
-
-
-# ==================== 테스트 코드 ====================
-
-if __name__ == "__main__":
-    """
-    wrapper.py를 직접 실행하면 테스트 모드로 동작
-    """
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='테니스장 제설 시뮬레이터')
-    parser.add_argument('--map', type=str, default='maps/TennisCourt_Clustered.pkl',
-                        help='맵 파일 경로')
-    parser.add_argument('--no-frame', action='store_true',
-                        help='로봇 프레임 숨기기')
-    parser.add_argument('--no-grid', action='store_true',
-                        help='그리드 숨기기')
-    parser.add_argument('--step-by-step', action='store_true',
-                        help='단계별 실행 모드 (디버깅용)')
-    
-    args = parser.parse_args()
-    
-    print("\n" + "=" * 60)
-    print("🧪 wrapper.py 테스트 모드")
-    print("=" * 60)
-    
-    if args.step_by_step:
-        # 방법 1: 단계별 실행 (디버깅용)
-        print("\n📝 단계별 실행 모드\n")
-        sim = SnowRemovalSimulator(
-            map_path=args.map,
-            show_frame=not args.no_frame,
-            show_grid=not args.no_grid
-        )
-        
-        sim.load_map_and_detect_snow()
-        input("\n⏸️ [Enter]를 누르면 다음 단계로 진행합니다...")
-        
-        sim.create_planners()
-        input("\n⏸️ [Enter]를 누르면 다음 단계로 진행합니다...")
-        
-        sim.initialize_simulator()
-        input("\n⏸️ [Enter]를 누르면 시뮬레이션을 시작합니다...")
-        
-        sim.run()
-    
-    else:
-        # 방법 2: Quick Start (기본)
-        print("\n🚀 Quick Start 모드\n")
-        quick_run(
-            map_path=args.map,
-            show_frame=not args.no_frame,
-            show_grid=not args.no_grid
-        )
->>>>>>> feature/control

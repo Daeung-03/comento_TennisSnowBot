@@ -1,3 +1,4 @@
+# Python <= 3.11
 autonavsim2D==2.0.0
 joblib==1.5.3
 numpy==2.4.1

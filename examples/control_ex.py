@@ -16,7 +16,7 @@ except ImportError:
     sys.exit(1)
 
 def monitor_control():
-    map_path = os.path.join(project_root, 'maps', 'TennisCourt_Clustered.pkl')
+    map_path = os.path.join(project_root, 'maps', 'TennisCourt_Snow.pkl')
     if not os.path.exists(map_path):
         print(f"❌ 맵 파일 없음")
         return
