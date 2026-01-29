@@ -1,17 +1,57 @@
-"""제어 팀원 테스트 예제"""
+"""
+examples/control_ex.py - Control 모듈 모니터링
+"""
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
-from main import TennisCourtSimulator
-from src.control.planner import custom_path_planner, custom_motion_planner
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+sys.path.insert(0, project_root)
 
-# 시뮬레이터 초기화
-sim = TennisCourtSimulator()
+try:
+    from src.launch.wrapper import SnowRemovalSimulator
+    from src.control.planner import create_snow_removal_planners
+except ImportError:
+    print("❌ 오류: 모듈을 찾을 수 없습니다.")
+    sys.exit(1)
 
-# 커스텀 플래너 등록
-sim.set_path_planner(custom_path_planner)
-sim.set_motion_planner(custom_motion_planner)
+def monitor_control():
+    map_path = os.path.join(project_root, 'maps', 'TennisCourt_Clustered.pkl')
+    if not os.path.exists(map_path):
+        print(f"❌ 맵 파일 없음")
+        return
 
-# 실행
-sim.run()
+    print("=" * 60)
+    print("🤖 Control Module Monitoring (Debug Mode)")
+    print("=" * 60)
+
+    sim = SnowRemovalSimulator(map_path=map_path, show_frame=True, show_grid=True)
+
+    sim.load_map_and_detect_snow()
+
+    print(">>> 2. Create Planners (Manual Injection)...")
+    
+    sim.custom_path_planner, sim.custom_motion_planner = create_snow_removal_planners(
+        sim.snow_clusters, 
+        debug_mode=True 
+    )
+    
+    # 확인용 출력
+    if sim.custom_path_planner:
+        print("    -> Planner Injected Successfully.")
+    else:
+        print("    -> ❌ Planner Injection Failed.")
+
+    print(">>> 3. Initialize Simulator...")
+    sim.initialize_simulator()
+
+    print(">>> 4. Run Simulation...")
+    try:
+        sim.run()
+    except KeyboardInterrupt:
+        print("\n⚠️ 중단됨")
+    except Exception as e:
+        print(f"\n❌ 에러: {e}")
+
+if __name__ == "__main__":
+    monitor_control()
