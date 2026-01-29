@@ -205,5 +205,8 @@ __marimo__/
 # Custom Rules
 
 .DS_Store
+*.pkl
+!maps/TennisCourt_Clean.pkl
+!maps/TennisCourt_Snow.pkl
 *.swp
 *.swo

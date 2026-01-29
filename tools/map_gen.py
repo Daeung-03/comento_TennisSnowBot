@@ -1,4 +1,6 @@
-"""테니스장 맵 생성 도구"""
+"""
+map_gen.py - 기본 맵 생성 도구
+"""
 from autonavsim2d.autonavsim2d import AutoNavSim2D
 
 config = {
